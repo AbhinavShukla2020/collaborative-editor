@@ -15,12 +15,18 @@ export class RoomRegistry {
     if (existing) return existing;
     const inFlight = this.loading.get(documentId);
     if (inFlight) return inFlight;
-    const load = this.persistence.load(documentId).then((document) => {
-      const room = new Room(documentId, document, this.persistence);
-      this.rooms.set(documentId, room);
-      this.loading.delete(documentId);
-      return room;
-    });
+    const load = this.persistence
+      .load(documentId)
+      .then((document) => {
+        const room = new Room(documentId, document, this.persistence);
+        this.rooms.set(documentId, room);
+        this.loading.delete(documentId);
+        return room;
+      })
+      .catch((error) => {
+        this.loading.delete(documentId);
+        throw error;
+      });
     this.loading.set(documentId, load);
     return load;
   }
@@ -41,5 +47,8 @@ export class RoomRegistry {
   get size(): number {
     return this.rooms.size;
   }
-}
 
+  async flushAll(): Promise<void> {
+    await Promise.all(Array.from(this.rooms.values(), (room) => room.flush()));
+  }
+}

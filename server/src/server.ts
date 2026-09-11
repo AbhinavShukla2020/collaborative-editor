@@ -30,11 +30,17 @@ http.on("upgrade", async (request, socket, head) => {
     socket.destroy();
     return;
   }
-  const room = await registry.get(match[1]);
-  sockets.handleUpgrade(request, socket, head, (websocket: WebSocket) => {
-    (websocket as WebSocket & { connectionId: string }).connectionId = randomUUID();
-    room.connect(websocket);
-  });
+  try {
+    const room = await registry.get(match[1]);
+    sockets.handleUpgrade(request, socket, head, (websocket: WebSocket) => {
+      (websocket as WebSocket & { connectionId: string }).connectionId = randomUUID();
+      room.connect(websocket);
+    });
+  } catch (error) {
+    console.error("failed to load document", error);
+    socket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
+    socket.destroy();
+  }
 });
 
 const cleanup = setInterval(() => void registry.evictIdle(), Math.min(config.idleRoomTtlMs, 30_000));
@@ -46,9 +52,9 @@ async function shutdown(): Promise<void> {
   clearInterval(cleanup);
   sockets.close();
   http.close();
+  await registry.flushAll();
   await pool.end();
 }
 
 process.on("SIGTERM", () => void shutdown());
 process.on("SIGINT", () => void shutdown());
-
